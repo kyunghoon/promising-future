@@ -7,6 +7,7 @@ use inner::Inner;
 use promise::Promise;
 use fnbox::Thunk;
 use spawner::{ThreadSpawner, Spawner};
+use error::Error;
 
 /// Result of calling `Future.poll()`.
 #[derive(Debug)]
@@ -47,6 +48,21 @@ fn wait_val<T>(inner: &CvMx<Inner<T>>) -> Option<T> {
             Val(v) => return v,
             Callback(_) => panic!("future with callback"),
             Gone => panic!("future gone"),
+        }
+    }
+}
+
+fn wait_val_result<T>(inner: &CvMx<Inner<T>>) -> Result<T, Error> {
+    use inner::Inner::*;
+
+    let mut lk = inner.mx.lock().expect("inner lock");
+
+    loop {
+        match mem::replace(&mut *lk, Empty) {
+            Empty => lk = inner.cv.wait(lk).map_err(|_| Error::CVWaitError)?,
+            Val(v) => return Ok(v.ok_or(Error::ValueError)?),
+            Callback(_) => return Err(Error::FutureWithCallbackError),
+            Gone => return Err(Error::FutureGoneError),
         }
     }
 }
@@ -163,6 +179,15 @@ impl<T> Future<T> {
         match self {
             Const(ref mut v) => v.take(),
             Prom(ref inner) => wait_val(inner),
+        }
+    }
+
+    pub fn wait(mut self) -> Result<T, Error> {
+        use self::Future::*;
+
+        match self {
+            Const(ref mut v) => Ok(v.take().ok_or(Error::ValueError)?),
+            Prom(ref inner) => wait_val_result(inner),
         }
     }
 

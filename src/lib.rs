@@ -90,10 +90,12 @@ mod spawner;
 mod util;
 mod futurestream;
 mod cvmx;
+mod error;
 
 pub use spawner::{Spawner, ThreadSpawner};
 pub use util::{any, all, all_with};
 pub use futurestream::{FutureStream, FutureStreamIter, FutureStreamWaiter};
+pub use error::Error;
 
 /// Result of calling `Future.poll()`.
 #[derive(Debug)]
@@ -225,6 +227,11 @@ impl<T> Future<T> {
     #[inline]
     pub fn value(self) -> Option<T> {
         self.0.value()
+    }
+
+    #[inline]
+    pub fn wait(self) -> Result<T, Error> {
+        self.0.wait()
     }
 
     /// Non-destructively get a reference to the `Future`s value.
